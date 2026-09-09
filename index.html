@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Firechat</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Chakra+Petch:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            background: #060a0e;
+            background-image:
+                    linear-gradient(rgba(0, 217, 255, 0.03) 1px, transparent 1px),
+                    linear-gradient(90deg, rgba(0, 217, 255, 0.03) 1px, transparent 1px);
+            background-size: 28px 28px;
+            color: #d7ecf2;
+            font-family: 'Chakra Petch', sans-serif;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+        }
+
+        #app {
+            width: 100%;
+            max-width: 480px;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        /* --- Auth screen --- */
+        #auth-screen {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 0 28px;
+        }
+
+        h1 {
+            font-family: 'Orbitron', sans-serif;
+            font-weight: 900;
+            font-size: 32px;
+            letter-spacing: 0.08em;
+            margin: 0 0 6px 0;
+            color: #7fe9ff;
+            text-shadow: 0 0 14px rgba(127, 233, 255, 0.55);
+        }
+
+        .tagline {
+            color: #5c8a94;
+            font-size: 13px;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            margin-bottom: 28px;
+            text-align: center;
+        }
+
+        #auth-screen input {
+            width: 100%;
+            max-width: 280px;
+        }
+
+        #auth-screen button {
+            width: 100%;
+            max-width: 280px;
+        }
+
+        input {
+            background: rgba(0, 217, 255, 0.04);
+            border: 1px solid #1c4650;
+            color: #d7ecf2;
+            font-family: 'Chakra Petch', sans-serif;
+            font-size: 16px;
+            padding: 13px 14px;
+            margin-bottom: 12px;
+            outline: none;
+            clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+        }
+
+        input:focus {
+            border-color: #7fe9ff;
+        }
+
+        input::placeholder {
+            color: #4a6b73;
+            text-transform: uppercase;
+            font-size: 13px;
+            letter-spacing: 0.04em;
+        }
+
+        button {
+            padding: 13px 14px;
+            border: 1px solid #7fe9ff;
+            font-family: 'Chakra Petch', sans-serif;
+            font-size: 14px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            cursor: pointer;
+            background: rgba(127, 233, 255, 0.12);
+            color: #7fe9ff;
+            clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+            transition: background 0.15s ease;
+        }
+
+        button:hover {
+            background: rgba(127, 233, 255, 0.22);
+        }
+
+        .text-btn {
+            background: none;
+            border: none;
+            clip-path: none;
+            color: #5c8a94;
+            font-weight: 400;
+            text-transform: none;
+            letter-spacing: normal;
+            font-size: 13px;
+            margin-top: 18px;
+        }
+
+        .text-btn:hover {
+            background: none;
+            color: #7fe9ff;
+        }
+
+        /* --- Chats list screen --- */
+        #chats-screen {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+        }
+
+        .topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            padding: 16px 18px;
+            border-bottom: 1px solid #1c4650;
+        }
+
+        .who {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: #5c8a94;
+            flex: 1;
+        }
+
+        .who b {
+            color: #7fe9ff;
+            font-family: 'Orbitron', sans-serif;
+        }
+
+        .topbar-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .icon-btn {
+            background: none;
+            border: 1px solid #1c4650;
+            color: #5c8a94;
+            font-size: 11px;
+            padding: 6px 10px;
+            clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+        }
+
+        .icon-btn:hover {
+            border-color: #7fe9ff;
+            color: #7fe9ff;
+            background: none;
+        }
+
+        #notif-btn {
+            width: 34px;
+            height: 34px;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #notif-btn svg {
+            width: 16px;
+            height: 16px;
+        }
+
+        #notif-btn.enabled {
+            border-color: #7fe9ff;
+            color: #7fe9ff;
+        }
+
+        .search-row {
+            display: flex;
+            gap: 8px;
+            padding: 14px 18px 6px 18px;
+        }
+
+        .search-row input {
+            flex: 1;
+            margin-bottom: 0;
+        }
+
+        .search-row button {
+            flex-shrink: 0;
+        }
+
+        .error-msg {
+            color: #ff6b5c;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+            padding: 4px 18px 0 18px;
+            min-height: 16px;
+        }
+
+        .contacts-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px 0;
+        }
+
+        .contact-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 13px 18px;
+            cursor: pointer;
+            border-bottom: 1px solid #142c33;
+        }
+
+        .contact-row:hover {
+            background: rgba(127, 233, 255, 0.05);
+        }
+
+        .avatar {
+            width: 38px;
+            height: 38px;
+            background: rgba(127, 233, 255, 0.08);
+            border: 1px solid #1c4650;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Orbitron', sans-serif;
+            font-weight: 700;
+            color: #7fe9ff;
+            flex-shrink: 0;
+            clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+        }
+
+        .avatar.big {
+            width: 96px;
+            height: 96px;
+            font-size: 36px;
+        }
+
+        .contact-name {
+            font-size: 15px;
+            letter-spacing: 0.02em;
+        }
+
+        .empty-state {
+            padding: 40px 24px;
+            text-align: center;
+            color: #4a6b73;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+            line-height: 1.6;
+        }
+
+        /* --- Chat screen --- */
+        #chat-screen {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+        }
+
+        .chat-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 14px 18px;
+            border-bottom: 1px solid #1c4650;
+        }
+
+        .back-btn {
+            background: none;
+            border: none;
+            clip-path: none;
+            color: #7fe9ff;
+            font-size: 20px;
+            padding: 0;
+            width: auto;
+            cursor: pointer;
+        }
+
+        .chat-header .contact-name {
+            font-family: 'Orbitron', sans-serif;
+            letter-spacing: 0.04em;
+            flex: 1;
+        }
+
+        .chat-header .icon-btn {
+            padding: 9px;
+            width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .chat-header .icon-btn svg {
+            width: 18px;
+            height: 18px;
+        }
+
+        .messages-area {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .bubble-row {
+            display: flex;
+        }
+
+        .bubble-row.out {
+            justify-content: flex-end;
+        }
+
+        .bubble {
+            max-width: 75%;
+            padding: 10px 14px;
+            font-size: 15px;
+            line-height: 1.4;
+            word-wrap: break-word;
+            clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+        }
+
+        .bubble.out {
+            background: rgba(127, 233, 255, 0.15);
+            border: 1px solid #7fe9ff;
+            color: #d7ecf2;
+        }
+
+        .bubble.in {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid #1c4650;
+        }
+
+        .bubble-time {
+            font-size: 10px;
+            color: #5c8a94;
+            margin-top: 4px;
+            display: block;
+        }
+
+        .composer {
+            display: flex;
+            gap: 8px;
+            padding: 12px;
+            border-top: 1px solid #1c4650;
+        }
+
+        .composer input {
+            flex: 1;
+            margin-bottom: 0;
+        }
+
+        .composer button {
+            flex-shrink: 0;
+        }
+
+        /* --- Incoming call popup --- */
+        #incoming-call-overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(6, 10, 14, 0.92);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 20;
+            padding: 28px;
+        }
+
+        #incoming-call-overlay .avatar {
+            margin-bottom: 18px;
+        }
+
+        #incoming-call-name {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 22px;
+            letter-spacing: 0.05em;
+            color: #7fe9ff;
+            margin-bottom: 4px;
+        }
+
+        #incoming-call-status {
+            color: #5c8a94;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            margin-bottom: 32px;
+        }
+
+        .call-actions {
+            display: flex;
+            gap: 16px;
+        }
+
+        .call-actions button {
+            width: 120px;
+        }
+
+        #decline-call-btn {
+            border-color: #ff6b5c;
+            background: rgba(255, 107, 92, 0.12);
+            color: #ff6b5c;
+        }
+
+        #decline-call-btn:hover {
+            background: rgba(255, 107, 92, 0.22);
+        }
+
+        /* --- Active call screen --- */
+        #call-screen {
+            position: absolute;
+            inset: 0;
+            background: #060a0e;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 30;
+            overflow: hidden;
+        }
+
+        #remote-video {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            background: #060a0e;
+        }
+
+        #local-video {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            width: 100px;
+            height: 140px;
+            object-fit: cover;
+            background: #10151b;
+            border: 1px solid #7fe9ff;
+            clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+            transform: scaleX(-1); /* mirror, like a selfie camera */
+            z-index: 2;
+        }
+
+        .call-info {
+            position: relative;
+            z-index: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        #call-screen.video-mode .call-info {
+            position: absolute;
+            top: 24px;
+            left: 0;
+            right: 0;
+            background: linear-gradient(rgba(6,10,14,0.75), transparent);
+            padding: 16px 0 30px;
+        }
+
+        #call-screen.video-mode .avatar.big {
+            display: none;
+        }
+
+        #call-with-name {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 22px;
+            letter-spacing: 0.05em;
+            color: #7fe9ff;
+            margin-top: 18px;
+        }
+
+        #call-screen.video-mode #call-with-name {
+            margin-top: 0;
+        }
+
+        #call-status {
+            color: #5c8a94;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            margin-top: 6px;
+        }
+
+        #remote-audio {
+            display: none;
+        }
+
+        .call-controls {
+            position: absolute;
+            bottom: 40px;
+            display: flex;
+            gap: 16px;
+            z-index: 2;
+        }
+
+        .call-controls button {
+            width: 60px;
+            height: 60px;
+            padding: 0;
+            border-radius: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+        }
+
+        #hangup-btn {
+            border-color: #ff6b5c;
+            background: rgba(255, 107, 92, 0.15);
+            color: #ff6b5c;
+        }
+
+        #hangup-btn:hover {
+            background: rgba(255, 107, 92, 0.28);
+        }
+
+        #mute-btn.active,
+        #camera-btn.active {
+            background: rgba(255, 107, 92, 0.15);
+            border-color: #ff6b5c;
+            color: #ff6b5c;
+        }
+
+        #camera-btn {
+            display: none;
+        }
+
+        #call-screen.video-mode #camera-btn {
+            display: flex;
+        }
+    </style>
+</head>
+<body>
+<div id="app">
+
+    <div id="auth-screen">
+        <h1>FIRECHAT</h1>
+        <p class="tagline" id="tagline">Pick a username. No phone, no email.</p>
+        <input type="text" id="username-input" placeholder="username">
+        <input type="password" id="password-input" placeholder="password">
+        <button id="main-btn">Create account</button>
+        <button class="text-btn" id="toggle-btn">Have an account? Sign in</button>
+    </div>
+
+    <div id="chats-screen" class="hidden">
+        <div class="topbar">
+            <div class="who">Signed in as <b id="current-username"></b></div>
+            <div class="topbar-actions">
+                <button class="icon-btn" id="notif-btn" title="Enable notifications">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/>
+                        <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+                    </svg>
+                </button>
+                <button class="icon-btn" id="signout-btn">Sign out</button>
+            </div>
+        </div>
+        <div class="search-row">
+            <input type="text" id="search-input" placeholder="Find a username…">
+            <button id="search-btn">Go</button>
+        </div>
+        <div class="error-msg" id="search-error"></div>
+        <div class="contacts-list" id="contacts-list"></div>
+    </div>
+
+    <div id="chat-screen" class="hidden">
+        <div class="chat-header">
+            <button class="back-btn" id="back-btn">←</button>
+            <div class="avatar" id="chat-avatar"></div>
+            <div class="contact-name" id="chat-with-name"></div>
+            <button class="icon-btn" id="call-btn" title="Voice call">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/>
+                </svg>
+            </button>
+            <button class="icon-btn" id="video-btn" title="Video call">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polygon points="23 7 16 12 23 17 23 7"/>
+                    <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+                </svg>
+            </button>
+        </div>
+        <div class="messages-area" id="messages-area"></div>
+        <div class="composer">
+            <input type="text" id="message-input" placeholder="Message…">
+            <button id="send-btn">Send</button>
+        </div>
+    </div>
+
+    <div id="incoming-call-overlay" class="hidden">
+        <div class="avatar big" id="incoming-call-avatar"></div>
+        <div id="incoming-call-name"></div>
+        <div id="incoming-call-status">Incoming call…</div>
+        <div class="call-actions">
+            <button id="accept-call-btn">Accept</button>
+            <button id="decline-call-btn">Decline</button>
+        </div>
+    </div>
+
+    <div id="call-screen" class="hidden">
+        <video id="remote-video" autoplay playsinline></video>
+        <video id="local-video" autoplay playsinline muted></video>
+        <audio id="remote-audio" autoplay></audio>
+        <div class="call-info">
+            <div class="avatar big" id="call-avatar"></div>
+            <div id="call-with-name"></div>
+            <div id="call-status">Calling…</div>
+        </div>
+        <div class="call-controls">
+            <button id="mute-btn">MUTE</button>
+            <button id="camera-btn">CAM</button>
+            <button id="hangup-btn">END</button>
+        </div>
+    </div>
+
+</div>
+<script type="module" src="script.js"></script>
+</body>
+</html>
