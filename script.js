@@ -7,6 +7,7 @@ import {
     getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword,
     onAuthStateChanged, signOut
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getMessaging, getToken } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js";
 
 const firebaseConfig = {
     apiKey: "AIzaSyCqiWdeHaQt-UIxihQHOmgbd8uOY1W7MNc",
@@ -228,7 +229,7 @@ function openChat(withUsername) {
                     const msg = change.doc.data();
                     if (msg.from !== currentUser && document.hidden) {
                         showNotification(msg.from, msg.text);
-                        playMessageSound(); // NEW
+                        playMessageSound();
                     }
                 }
             });
@@ -299,10 +300,6 @@ function getAudioContext() {
     return audioCtx;
 }
 
-// Browsers block sound until the page has been interacted with at least
-// once. This quietly "unlocks" audio the first time the person taps or
-// clicks anything at all, so ringtones/dings work later without needing
-// their own separate permission click.
 let audioUnlocked = false;
 function unlockAudio() {
     if (audioUnlocked) return;
@@ -336,7 +333,6 @@ let ringtoneInterval = null;
 function ringOnce() {
     const ctx = getAudioContext();
     const now = ctx.currentTime;
-    // two quick tones, like an old phone ring "brring-brring"
     [0, 0.18].forEach(delay => {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
@@ -357,7 +353,6 @@ function startRingtone() {
     ringtoneInterval = setInterval(ringOnce, 2000);
 
     if ('vibrate' in navigator) {
-        // repeating buzz-pause pattern, similar to a real incoming call
         navigator.vibrate([500, 300, 500, 300, 500, 1200]);
     }
 }
@@ -376,12 +371,30 @@ function stopRingtone() {
 // ==============================
 
 const notifBtn = document.getElementById('notif-btn');
+const messaging = getMessaging(app);
+const VAPID_KEY = "BMH3TdDFv7OrFThoSQhCF6FGKGxdoqfSgXT5uJrH9tlzmH0pfl2S8ywdYoC7wPJgFLtsMLhPl3rXWsM4dIeEKCw";
 
 function updateNotifButtonState() {
     if ('Notification' in window && Notification.permission === 'granted') {
         notifBtn.classList.add('enabled');
     } else {
         notifBtn.classList.remove('enabled');
+    }
+}
+
+async function registerForPush() {
+    try {
+        const registration = await navigator.serviceWorker.ready;
+        const token = await getToken(messaging, {
+            vapidKey: VAPID_KEY,
+            serviceWorkerRegistration: registration
+        });
+        if (token) {
+            await updateDoc(doc(db, 'users', currentUser), { fcmToken: token });
+            console.log('Push token saved.');
+        }
+    } catch (err) {
+        console.error('Could not get push token:', err);
     }
 }
 
@@ -396,6 +409,9 @@ notifBtn.addEventListener('click', async () => {
     }
     await Notification.requestPermission();
     updateNotifButtonState();
+    if (Notification.permission === 'granted') {
+        registerForPush();
+    }
 });
 
 function showNotification(title, body) {
@@ -444,7 +460,7 @@ let currentCallDocUnsub = null;
 let candidatesUnsub = null;
 let isCaller = false;
 let unsubscribeIncomingCalls = null;
-let unsubscribeRingingCallWatch = null; // NEW — watches a specific incoming call for cancellation
+let unsubscribeRingingCallWatch = null;
 let pendingCandidates = [];
 let currentCallType = 'audio';
 let incomingCallType = 'audio';
@@ -477,9 +493,8 @@ function showIncomingCall(callId, callData) {
         `${incomingCallType === 'video' ? 'Incoming video call' : 'Incoming call'} — ${callData.from}`,
         'Tap to open Firechat'
     );
-    startRingtone(); // NEW
+    startRingtone();
 
-    // NEW — if the caller hangs up before we answer, stop ringing and hide the popup
     if (unsubscribeRingingCallWatch) unsubscribeRingingCallWatch();
     unsubscribeRingingCallWatch = onSnapshot(doc(db, 'calls', callId), (snap) => {
         const data = snap.data();
@@ -491,7 +506,7 @@ function showIncomingCall(callId, callData) {
 }
 
 declineCallBtn.addEventListener('click', async () => {
-    stopRingtone(); // NEW
+    stopRingtone();
     if (unsubscribeRingingCallWatch) { unsubscribeRingingCallWatch(); unsubscribeRingingCallWatch = null; }
     if (currentCallId) {
         await updateDoc(doc(db, 'calls', currentCallId), { status: 'ended' });
@@ -501,7 +516,7 @@ declineCallBtn.addEventListener('click', async () => {
 });
 
 acceptCallBtn.addEventListener('click', async () => {
-    stopRingtone(); // NEW
+    stopRingtone();
     if (unsubscribeRingingCallWatch) { unsubscribeRingingCallWatch(); unsubscribeRingingCallWatch = null; }
     incomingCallOverlay.classList.add('hidden');
     const callDocSnap = await getDoc(doc(db, 'calls', currentCallId));
@@ -709,7 +724,7 @@ hangupBtn.addEventListener('click', async () => {
 });
 
 function endCall() {
-    stopRingtone(); // NEW — safety net in case it was somehow still running
+    stopRingtone();
     if (peerConnection) {
         peerConnection.close();
         peerConnection = null;

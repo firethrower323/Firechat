@@ -24,8 +24,6 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
-// Network-first so chats/calls always stay live — Firebase requests pass
-// straight through untouched since they're on a different origin.
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
   if (url.origin !== self.location.origin) return;
@@ -38,5 +36,34 @@ self.addEventListener("fetch", (event) => {
         return response;
       })
       .catch(() => caches.match(event.request))
+  );
+});
+
+// This fires even when Firechat is fully closed. A real push notification
+// arrives as raw data; we decide how to display it.
+self.addEventListener("push", (event) => {
+  if (!event.data) return;
+  const payload = event.data.json();
+
+  event.waitUntil(
+    self.registration.showNotification(payload.title || "Firechat", {
+      body: payload.body || "",
+      icon: "icon-192.png",
+      badge: "icon-192.png"
+    })
+  );
+});
+
+// Tapping the notification focuses Firechat if it's already open somewhere,
+// or opens a fresh window if it isn't.
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  event.waitUntil(
+    clients.matchAll({ type: "window" }).then((clientList) => {
+      for (const client of clientList) {
+        if ("focus" in client) return client.focus();
+      }
+      if (clients.openWindow) return clients.openWindow("./index.html");
+    })
   );
 });
