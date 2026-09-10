@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
-    getFirestore, doc, getDoc, setDoc, updateDoc, arrayUnion,
+    getFirestore, doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove,
     collection, addDoc, query, where, orderBy, onSnapshot
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
@@ -28,6 +28,7 @@ const FAKE_EMAIL_DOMAIN = '@firechat.local';
 const authScreen = document.getElementById('auth-screen');
 const chatsScreen = document.getElementById('chats-screen');
 const chatScreen = document.getElementById('chat-screen');
+const notifSettingsScreen = document.getElementById('notif-settings-screen');
 
 const usernameInput = document.getElementById('username-input');
 const passwordInput = document.getElementById('password-input');
@@ -54,6 +55,7 @@ let currentUser = null;
 let activeChatWith = null;
 let unsubscribeMessages = null;
 let unsubscribeContacts = null;
+let lastContactsList = []; // NEW — keeps the current contact names handy for the settings screen
 
 // --- auth mode toggle ---
 toggleBtn.addEventListener('click', () => {
@@ -100,6 +102,7 @@ mainBtn.addEventListener('click', async () => {
         }
         await setDoc(doc(db, 'users', username), { joined: Date.now() });
         await setDoc(doc(db, 'contacts', username), { list: [] });
+        await setDoc(doc(db, 'settings', username), { notificationsEnabled: false, mutedUsers: [], blockedUsers: [] });
     } else {
         try {
             await signInWithEmailAndPassword(auth, fakeEmail, password);
@@ -122,8 +125,10 @@ onAuthStateChanged(auth, (user) => {
         currentUser = null;
         if (unsubscribeContacts) unsubscribeContacts();
         if (unsubscribeIncomingCalls) unsubscribeIncomingCalls();
+        if (unsubscribeSettings) unsubscribeSettings();
         chatsScreen.classList.add('hidden');
         chatScreen.classList.add('hidden');
+        notifSettingsScreen.classList.add('hidden');
         authScreen.classList.remove('hidden');
     }
 });
@@ -138,7 +143,7 @@ function enterApp(username) {
     passwordInput.value = '';
     listenToContacts();
     listenForIncomingCalls();
-    updateNotifButtonState();
+    listenToSettings(); // NEW
 }
 
 signoutBtn.addEventListener('click', () => {
@@ -151,6 +156,7 @@ function listenToContacts() {
     if (unsubscribeContacts) unsubscribeContacts();
     unsubscribeContacts = onSnapshot(contactsRef, (snap) => {
         const list = snap.exists() ? snap.data().list : [];
+        lastContactsList = list; // NEW
         renderContacts(list);
     });
 }
@@ -227,7 +233,7 @@ function openChat(withUsername) {
             snapshot.docChanges().forEach(change => {
                 if (change.type === 'added') {
                     const msg = change.doc.data();
-                    if (msg.from !== currentUser && document.hidden) {
+                    if (msg.from !== currentUser && document.hidden && shouldNotifyFor(msg.from)) {
                         showNotification(msg.from, msg.text);
                         playMessageSound();
                     }
@@ -367,19 +373,48 @@ function stopRingtone() {
 
 
 // ==============================
-// NOTIFICATIONS
+// NOTIFICATION SETTINGS
 // ==============================
 
 const notifBtn = document.getElementById('notif-btn');
+const notifBackBtn = document.getElementById('notif-back-btn');
+const notifMasterToggle = document.getElementById('notif-master-toggle');
+const notifMasterSublabel = document.getElementById('notif-master-sublabel');
+const notifContactsList = document.getElementById('notif-contacts-list');
 const messaging = getMessaging(app);
 const VAPID_KEY = "BMH3TdDFv7OrFThoSQhCF6FGKGxdoqfSgXT5uJrH9tlzmH0pfl2S8ywdYoC7wPJgFLtsMLhPl3rXWsM4dIeEKCw";
 
+let currentSettings = { notificationsEnabled: false, mutedUsers: [], blockedUsers: [] };
+let unsubscribeSettings = null;
+
+function listenToSettings() {
+    const settingsRef = doc(db, 'settings', currentUser);
+    if (unsubscribeSettings) unsubscribeSettings();
+    unsubscribeSettings = onSnapshot(settingsRef, (snap) => {
+        if (snap.exists()) {
+            currentSettings = snap.data();
+        } else {
+            currentSettings = { notificationsEnabled: false, mutedUsers: [], blockedUsers: [] };
+        }
+        updateNotifButtonState();
+        renderNotifSettingsScreen();
+    });
+}
+
 function updateNotifButtonState() {
-    if ('Notification' in window && Notification.permission === 'granted') {
-        notifBtn.classList.add('enabled');
-    } else {
-        notifBtn.classList.remove('enabled');
-    }
+    notifBtn.classList.toggle('enabled', !!currentSettings.notificationsEnabled);
+}
+
+// checks whether a message/call from a given username should actually notify
+function shouldNotifyFor(fromUsername) {
+    if (!currentSettings.notificationsEnabled) return false;
+    if ((currentSettings.mutedUsers || []).includes(fromUsername)) return false;
+    if ((currentSettings.blockedUsers || []).includes(fromUsername)) return false;
+    return true;
+}
+
+function isBlocked(fromUsername) {
+    return (currentSettings.blockedUsers || []).includes(fromUsername);
 }
 
 async function registerForPush() {
@@ -391,28 +426,88 @@ async function registerForPush() {
         });
         if (token) {
             await updateDoc(doc(db, 'users', currentUser), { fcmToken: token });
-            console.log('Push token saved.');
         }
     } catch (err) {
         console.error('Could not get push token:', err);
     }
 }
 
-notifBtn.addEventListener('click', async () => {
-    if (!('Notification' in window)) {
-        alert('This browser does not support notifications.');
-        return;
-    }
-    if (Notification.permission === 'granted') {
-        alert('Notifications are already on.');
-        return;
-    }
-    await Notification.requestPermission();
-    updateNotifButtonState();
-    if (Notification.permission === 'granted') {
+// clicking the bell just opens the settings screen now
+notifBtn.addEventListener('click', () => {
+    chatsScreen.classList.add('hidden');
+    notifSettingsScreen.classList.remove('hidden');
+    renderNotifSettingsScreen();
+});
+
+notifBackBtn.addEventListener('click', () => {
+    notifSettingsScreen.classList.add('hidden');
+    chatsScreen.classList.remove('hidden');
+});
+
+// the master toggle: turning it on requests permission (first time) and
+// flips our own app-level flag; turning it off just flips the flag
+notifMasterToggle.addEventListener('click', async () => {
+    const turningOn = !currentSettings.notificationsEnabled;
+
+    if (turningOn) {
+        if ('Notification' in window && Notification.permission !== 'granted') {
+            const result = await Notification.requestPermission();
+            if (result !== 'granted') {
+                alert('Notifications are blocked in your browser settings. Enable them there first.');
+                return;
+            }
+        }
         registerForPush();
     }
+
+    await setDoc(doc(db, 'settings', currentUser), { notificationsEnabled: turningOn }, { merge: true });
 });
+
+function renderNotifSettingsScreen() {
+    notifMasterToggle.classList.toggle('on', !!currentSettings.notificationsEnabled);
+    notifMasterSublabel.textContent = currentSettings.notificationsEnabled ? 'On' : 'Off';
+
+    notifContactsList.innerHTML = '';
+
+    if (lastContactsList.length === 0) {
+        notifContactsList.innerHTML = '<div class="empty-state">No contacts yet.</div>';
+        return;
+    }
+
+    lastContactsList.forEach(username => {
+        const muted = (currentSettings.mutedUsers || []).includes(username);
+        const blocked = (currentSettings.blockedUsers || []).includes(username);
+
+        const row = document.createElement('div');
+        row.className = 'notif-contact-row';
+        row.innerHTML = `
+      <div class="avatar">${username[0].toUpperCase()}</div>
+      <div class="contact-name">${username}</div>
+      <button class="small-toggle-btn mute-toggle ${muted ? 'muted' : ''}">${muted ? 'MUTED' : 'MUTE'}</button>
+      <button class="small-toggle-btn block-toggle ${blocked ? 'blocked' : ''}">${blocked ? 'BLOCKED' : 'BLOCK'}</button>
+    `;
+
+        row.querySelector('.mute-toggle').addEventListener('click', async () => {
+            const settingsRef = doc(db, 'settings', currentUser);
+            if (muted) {
+                await updateDoc(settingsRef, { mutedUsers: arrayRemove(username) });
+            } else {
+                await updateDoc(settingsRef, { mutedUsers: arrayUnion(username) });
+            }
+        });
+
+        row.querySelector('.block-toggle').addEventListener('click', async () => {
+            const settingsRef = doc(db, 'settings', currentUser);
+            if (blocked) {
+                await updateDoc(settingsRef, { blockedUsers: arrayRemove(username) });
+            } else {
+                await updateDoc(settingsRef, { blockedUsers: arrayUnion(username) });
+            }
+        });
+
+        notifContactsList.appendChild(row);
+    });
+}
 
 function showNotification(title, body) {
     if (!('Notification' in window) || Notification.permission !== 'granted') return;
@@ -474,7 +569,15 @@ function listenForIncomingCalls() {
     unsubscribeIncomingCalls = onSnapshot(q, (snapshot) => {
         snapshot.docChanges().forEach(change => {
             if (change.type === 'added') {
-                showIncomingCall(change.doc.id, change.doc.data());
+                const callData = change.doc.data();
+
+                // NEW — blocked callers get silently declined, no ring, no popup
+                if (isBlocked(callData.from)) {
+                    updateDoc(doc(db, 'calls', change.doc.id), { status: 'ended' });
+                    return;
+                }
+
+                showIncomingCall(change.doc.id, callData);
             }
         });
     });
@@ -489,11 +592,15 @@ function showIncomingCall(callId, callData) {
     incomingCallStatus.textContent = incomingCallType === 'video' ? 'Incoming video call…' : 'Incoming call…';
     incomingCallOverlay.classList.remove('hidden');
 
-    showNotification(
-        `${incomingCallType === 'video' ? 'Incoming video call' : 'Incoming call'} — ${callData.from}`,
-        'Tap to open Firechat'
-    );
-    startRingtone();
+    // NEW — muted contacts still get the overlay (you can still answer),
+    // just no sound/vibration/system notification
+    if (shouldNotifyFor(callData.from)) {
+        showNotification(
+            `${incomingCallType === 'video' ? 'Incoming video call' : 'Incoming call'} — ${callData.from}`,
+            'Tap to open Firechat'
+        );
+        startRingtone();
+    }
 
     if (unsubscribeRingingCallWatch) unsubscribeRingingCallWatch();
     unsubscribeRingingCallWatch = onSnapshot(doc(db, 'calls', callId), (snap) => {
