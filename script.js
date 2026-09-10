@@ -24,6 +24,25 @@ const auth = getAuth(app);
 
 const FAKE_EMAIL_DOMAIN = '@firechat.local';
 
+// --- push-sending backend ---
+const WORKER_URL = "https://fire-chat.firethrower323.workers.dev";
+const WORKER_API_KEY = "ilikepotatoes123";
+
+async function requestPush(toUsername, title, body) {
+    try {
+        await fetch(WORKER_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Api-Key': WORKER_API_KEY
+            },
+            body: JSON.stringify({ to: toUsername, from: currentUser, title, body })
+        });
+    } catch (err) {
+        console.error('Push request failed:', err);
+    }
+}
+
 // --- element references ---
 const authScreen = document.getElementById('auth-screen');
 const chatsScreen = document.getElementById('chats-screen');
@@ -55,7 +74,7 @@ let currentUser = null;
 let activeChatWith = null;
 let unsubscribeMessages = null;
 let unsubscribeContacts = null;
-let lastContactsList = []; // NEW — keeps the current contact names handy for the settings screen
+let lastContactsList = [];
 
 // --- auth mode toggle ---
 toggleBtn.addEventListener('click', () => {
@@ -143,7 +162,7 @@ function enterApp(username) {
     passwordInput.value = '';
     listenToContacts();
     listenForIncomingCalls();
-    listenToSettings(); // NEW
+    listenToSettings();
 }
 
 signoutBtn.addEventListener('click', () => {
@@ -156,7 +175,7 @@ function listenToContacts() {
     if (unsubscribeContacts) unsubscribeContacts();
     unsubscribeContacts = onSnapshot(contactsRef, (snap) => {
         const list = snap.exists() ? snap.data().list : [];
-        lastContactsList = list; // NEW
+        lastContactsList = list;
         renderContacts(list);
     });
 }
@@ -279,6 +298,8 @@ async function sendMessage() {
         text: text,
         ts: Date.now()
     });
+
+    requestPush(activeChatWith, currentUser, text);
 }
 
 sendBtn.addEventListener('click', sendMessage);
@@ -405,7 +426,6 @@ function updateNotifButtonState() {
     notifBtn.classList.toggle('enabled', !!currentSettings.notificationsEnabled);
 }
 
-// checks whether a message/call from a given username should actually notify
 function shouldNotifyFor(fromUsername) {
     if (!currentSettings.notificationsEnabled) return false;
     if ((currentSettings.mutedUsers || []).includes(fromUsername)) return false;
@@ -425,14 +445,13 @@ async function registerForPush() {
             serviceWorkerRegistration: registration
         });
         if (token) {
-            await updateDoc(doc(db, 'users', currentUser), { fcmToken: token });
+            await setDoc(doc(db, 'settings', currentUser), { fcmToken: token }, { merge: true });
         }
     } catch (err) {
         console.error('Could not get push token:', err);
     }
 }
 
-// clicking the bell just opens the settings screen now
 notifBtn.addEventListener('click', () => {
     chatsScreen.classList.add('hidden');
     notifSettingsScreen.classList.remove('hidden');
@@ -444,8 +463,6 @@ notifBackBtn.addEventListener('click', () => {
     chatsScreen.classList.remove('hidden');
 });
 
-// the master toggle: turning it on requests permission (first time) and
-// flips our own app-level flag; turning it off just flips the flag
 notifMasterToggle.addEventListener('click', async () => {
     const turningOn = !currentSettings.notificationsEnabled;
 
@@ -571,7 +588,6 @@ function listenForIncomingCalls() {
             if (change.type === 'added') {
                 const callData = change.doc.data();
 
-                // NEW — blocked callers get silently declined, no ring, no popup
                 if (isBlocked(callData.from)) {
                     updateDoc(doc(db, 'calls', change.doc.id), { status: 'ended' });
                     return;
@@ -592,8 +608,6 @@ function showIncomingCall(callId, callData) {
     incomingCallStatus.textContent = incomingCallType === 'video' ? 'Incoming video call…' : 'Incoming call…';
     incomingCallOverlay.classList.remove('hidden');
 
-    // NEW — muted contacts still get the overlay (you can still answer),
-    // just no sound/vibration/system notification
     if (shouldNotifyFor(callData.from)) {
         showNotification(
             `${incomingCallType === 'video' ? 'Incoming video call' : 'Incoming call'} — ${callData.from}`,
@@ -688,6 +702,12 @@ async function startCall(type) {
         status: 'ringing',
         createdAt: Date.now()
     });
+
+    requestPush(
+        activeChatWith,
+        currentUser,
+        `${type === 'video' ? 'Incoming video call' : 'Incoming call'} — ${currentUser}`
+    );
 
     currentCallDocUnsub = onSnapshot(callDocRef, async (snap) => {
         const data = snap.data();
